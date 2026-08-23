@@ -30,6 +30,11 @@
     "node": ">=20.3"
   },
   "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "author": {
     "name": "Lantern",
     "email": "ox-alpha@users.noreply.github.com"
