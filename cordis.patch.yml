@@ -1,0 +1,12 @@
+# dsh-freeweb bundle layer: mount the freeweb plugin and route the web seam's
+# search capability to it. The base layer (or an earlier bundle patch) pins
+# `searchProvider` to some id; a patch row replaces the targeted row's whole
+# config, and `searchProvider` is that row's only base key. A later profile
+# patch can pin any provider back (e.g. modsearch).
+- id: web
+  config:
+    searchProvider: freeweb
+
+- insert:
+    - id: freeweb
+      name: 'dsh-freeweb'

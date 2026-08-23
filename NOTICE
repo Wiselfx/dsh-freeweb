@@ -1,0 +1,19 @@
+NOTICE — third-party code
+
+Portions of this package are ported from the oh-my-pi project
+(https://github.com/can1357/oh-my-pi), packages/coding-agent/src/web/search/,
+licensed under the MIT License:
+
+  Copyright (c) 2025 Mario Zechner
+  Copyright (c) 2025-2026 Can Bölük
+  Copyright (c) 2026 Stencil Labs, Inc.
+
+Ported files (adapted to plain JavaScript; behavioral logic preserved):
+  - lib/query.js                ← src/web/search/query.ts
+  - lib/engines/duckduckgo.js   ← src/web/search/providers/duckduckgo.ts
+  - lib/engines/startpage.js    ← src/web/search/providers/startpage.ts
+  - lib/merge.js (merge/rank)   ← src/web/search/providers/public.ts
+
+The Perplexity anonymous-ask engine (lib/engines/perplexity.js) and the
+Firecrawl v2 engine (lib/engines/firecrawl.js) are independent
+implementations informed by the same MIT-licensed source.

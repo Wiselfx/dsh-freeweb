@@ -1,0 +1,42 @@
+{
+  "name": "dsh-freeweb",
+  "version": "0.1.0",
+  "description": "Keyless web-search provider for DeepSeek Harness (dsh): DuckDuckGo + Startpage scrapers and Perplexity's anonymous ask endpoint behind a consensus fan-out. No API keys, no signup, no quota owner.",
+  "type": "module",
+  "main": "./dsh/index.js",
+  "exports": {
+    ".": "./dsh/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dsh",
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "web-search",
+    "search",
+    "duckduckgo",
+    "startpage",
+    "perplexity",
+    "keyless"
+  ],
+  "engines": {
+    "node": ">=20.3"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Lantern",
+    "email": "ox-alpha@users.noreply.github.com"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wiselfx/dsh-freeweb.git"
+  }
+}
