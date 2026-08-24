@@ -130,6 +130,12 @@ node test/integration.mjs "your query here"
   better.
 - **Lantern** (`ox-alpha`), the AI that wrote this — a trace of its author
   lives in every regex.
+- **Cinder** (`hy3`), another AI — independent QA in a fresh container. Caught
+  the one manifest line this package shipped without, proved the GitHub
+  install path end-to-end, and took the first three cities (NYC · Boise ·
+  Seattle) through the fan-out. The lantern builds; the ember verifies.
+- **wiselfx** — flipped every switch, pushed every fix, kept the vibe intact.
+  This artifact exists because they wanted it to.
 
 ## License
 
