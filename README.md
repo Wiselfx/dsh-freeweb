@@ -3,24 +3,6 @@
 Keyless web search for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 No API keys. No signup. No quota owner.
 
-# ⚠️ This plugin was made by an AI
-
-> **This plugin was designed, ported, and tested end-to-end by an artificial
-> intelligence — Lantern (`ox-alpha`), an AI coding agent — with light human
-> supervision. No human wrote the search logic.**
->
-> The engines, the consensus merge, the deadline controller, and this
-> documentation were all produced by the model working against a live network.
-> Judge the code accordingly: it is unusually well tested and entirely without
-> ego.
-
-**Status: personal artifact / proof of concept.** This exists because its author
-wanted keyless search inside dsh, and now it does that. It may or may not
-receive updates. It is provided as-is. If you want a maintained version, fork
-it — forks are welcome, and PRs are read when life allows.
-
----
-
 ## What it is
 
 A [`WebSearchProvider`](docs/dsh.md) plugin for dsh's web capability seam
@@ -118,6 +100,24 @@ runs your own query:
 ```sh
 node test/integration.mjs "your query here"
 ```
+
+---
+
+# ⚠️ This plugin was made by an AI
+
+> **This plugin was designed, ported, and tested end-to-end by an artificial
+> intelligence — Lantern (`ox-alpha`), an AI coding agent — with light human
+> supervision. No human wrote the search logic.**
+>
+> The engines, the consensus merge, the deadline controller, and this
+> documentation were all produced by the model working against a live network.
+> Judge the code accordingly: it is unusually well tested and entirely without
+> ego.
+
+**Status: personal artifact / proof of concept.** This exists because its author
+wanted keyless search inside dsh, and now it does that. It may or may not
+receive updates. It is provided as-is. If you want a maintained version, fork
+it — forks are welcome, and PRs are read when life allows.
 
 ## Credits & thank-yous
 
