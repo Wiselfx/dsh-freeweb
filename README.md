@@ -1,104 +1,150 @@
 # dsh-freeweb
 
-Keyless web search for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
-No API keys. No signup. No quota owner.
+**A keyless web-search provider for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
 
-## What it is
+The model calls the `web_search` tool with a query; the plugin runs two search
+engines concurrently, merges their results into one list, removes duplicates,
+and shortens snippets by rank. If an engine fails, the next one in the order
+takes its place. No API key or account is required, and the default
+configuration needs no changes.
 
-A [`WebSearchProvider`](docs/dsh.md) plugin for dsh's web capability seam
-(`ctx.web`). It keeps dsh's built-in `web_search` tool, citation cards, and UI
-exactly as they are, and swaps only the engine behind them. Queries fan out to
-three independent keyless engines — plus an optional fourth — and come back as
-one consensus-ranked answer.
+## Install it
 
-| Engine | Kind | Needs |
-| --- | --- | --- |
-| **DuckDuckGo** (`html.duckduckgo.com`) | HTML scraper; POST with automatic GET fallback | nothing |
-| **Startpage** (`startpage.com/sp/search`) | Google's index behind a privacy proxy; solves its Anubis SHA-256 proof-of-work in pure Node | nothing |
-| **Perplexity** (`perplexity.ai/rest/sse/perplexity_ask`, anonymous) | synthesized answer + cited sources over SSE | nothing |
-| **Firecrawl** (`api.firecrawl.dev/v2/search`, optional) | SERP-backed results, native Google operators | API key (env `FIRECRAWL_API_KEY`) or self-hosted endpoint; **auto-skipped without one** |
-
-## Install
-
-Requires [Node.js](https://nodejs.org) ≥ 20.3 and dsh. Nothing else.
-
-**Straight from GitHub — no npm account needed:**
+Requires [Node.js](https://nodejs.org) ≥ 20.3 and dsh.
 
 ```sh
+# straight from GitHub — no npm account needed
 npx -y @deepseek-ai/dsh plugin --profile web add wiselfx/dsh-freeweb
 ```
 
-`dsh plugin` forwards install specs to pnpm verbatim, so `owner/repo`, full
-`https://github.com/…​.git` URLs, and pinned refs (`owner/repo#v0.1.0`) all
-work — the package is fetched from GitHub and activated because it declares a
-dsh bundle.
-
-**Local checkout:**
-
 ```sh
+# or from a local checkout
 npx -y @deepseek-ai/dsh plugin --profile web add /path/to/dsh-freeweb
 ```
 
-**npm (if ever published):**
-
-```sh
-npx -y @deepseek-ai/dsh plugin --profile web add dsh-freeweb
-```
-
-Restart dsh, then verify composition without spending anything:
+Restart dsh. To check it loaded without searching anything:
 
 ```sh
 npx -y @deepseek-ai/dsh --profile web --dump-config   # expect searchProvider: freeweb
 ```
 
-See [docs/install.md](docs/install.md) for all three paths in detail,
-uninstall steps, and troubleshooting.
+Pinned versions work too (`wiselfx/dsh-freeweb#v0.1.0`). More in
+[docs/install.md](docs/install.md).
 
-## Configuration
+### Enable in minimal mode
 
-Defaults live on the plugin entry; every value is optional:
+`minimal` mounts no `web_search` tool, so this plugin's results reach the
+model only in `standard` and `ptc`. To add it, insert `tool-web` into the
+`minimal` preset in your profile patch (`~/.dsh/profiles/web/cordis.patch.yml`):
 
 ```yaml
-- id: freeweb
-  name: 'dsh-freeweb'
+- id: preset-minimal
   config:
-    engines:
-      duckduckgo: true
-      startpage: true
-      perplexity: true
-      firecrawl: auto      # auto = only when a key/endpoint exists; true|false also accepted
-    firecrawlApiKey: ''    # or env FIRECRAWL_API_KEY; free tier at firecrawl.dev, no card
-    softDeadlineMs: 6000    # early-return once ≥1 engine answered
-    hardDeadlineMs: 27000   # absolute cap; stragglers aborted
-    engineTimeoutMs: 25000  # per-engine transport timeout
+    plugins:
+      - id: tool-web
+        name: '@deepseek-ai/dsh-tool-web'
+        config:
+          fetch: true
+          searchTimeoutMs: 60000
 ```
 
-The deadlines bound each call: engines get 25 s individually, the whole
-fan-out returns early at 6 s once something has answered, and nothing outlives
-27 s. Config changes take effect after a dsh restart.
+Restart dsh, then confirm it loaded in `minimal` (not `standard`):
 
-## How it works
+```sh
+npx -y @deepseek-ai/dsh --profile web --dump-config   # expect tool-web under preset-minimal
+```
 
-The provider fires every enabled engine concurrently and merges whatever comes
-back by cross-engine agreement: URLs are deduplicated on a canonical key, then
-ranked by how many engines returned them, then by best per-engine position. One
-blocked or slow engine never fails a search — single-engine walls are absorbed
-silently — and only every engine failing at once is an error. The full design,
-including failure semantics and how to add an engine, is in
-[docs/architecture.md](docs/architecture.md).
+## Which engines
+
+Exa and Keenable run first. degoog, Startpage, DuckDuckGo and AnySearch are
+fallbacks and take over when one fails. All six are keyless; optional keys only
+raise rate limits.
+
+## Settings
+
+The defaults require no changes. Engine order, timeouts and optional keys are
+documented in [docs/architecture.md](docs/architecture.md).
 
 ## Testing
 
 ```sh
-node test/integration.mjs
+node test/offline.mjs                       # no network
+node test/integration.mjs                   # every engine, live
+node test/integration.mjs "your query"      # your own query
 ```
 
-Live end-to-end suite: exercises the real engines over the network and checks
-the plugin wiring with a mock harness context. It passes. An optional argument
-runs your own query:
+---
+
+# dsh-freeweb（中文）
+
+**一个无需密钥的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 网页搜索插件。**
+
+模型调用 `web_search` 工具并传入查询；插件同时运行两个搜索引擎，把结果合并为
+一个列表、去除重复项，并按排名缩短摘要。某个引擎失败时，顺序中的下一个引擎
+接替它。无需 API 密钥或账号，默认配置无需修改。
+
+## 安装
+
+需要 [Node.js](https://nodejs.org) ≥ 20.3 和 dsh。
 
 ```sh
-node test/integration.mjs "your query here"
+# 直接从 GitHub 安装 —— 不需要 npm 账号
+npx -y @deepseek-ai/dsh plugin --profile web add wiselfx/dsh-freeweb
+```
+
+```sh
+# 或从本地目录安装
+npx -y @deepseek-ai/dsh plugin --profile web add /path/to/dsh-freeweb
+```
+
+重启 dsh。想确认是否加载成功，可以不触发搜索直接检查：
+
+```sh
+npx -y @deepseek-ai/dsh --profile web --dump-config   # 应看到 searchProvider: freeweb
+```
+
+也支持固定版本（`wiselfx/dsh-freeweb#v0.1.0`）。更多内容见
+[docs/install.md](docs/install.md)。
+
+### 在极简模式启用
+
+`minimal` 不挂载 `web_search` 工具，因此本插件的结果只会在 `standard` 和
+`ptc` 模式下进入模型。若要在 `minimal` 中加入，把 `tool-web` 插入你 profile
+补丁（`~/.dsh/profiles/web/cordis.patch.yml`）里 `minimal` 预设的 `plugins`：
+
+```yaml
+- id: preset-minimal
+  config:
+    plugins:
+      - id: tool-web
+        name: '@deepseek-ai/dsh-tool-web'
+        config:
+          fetch: true
+          searchTimeoutMs: 60000
+```
+
+重启 dsh，然后确认它在 `minimal`（而非 `standard`）下生效：
+
+```sh
+npx -y @deepseek-ai/dsh --profile web --dump-config   # 应在 preset-minimal 下看到 tool-web
+```
+
+## 使用哪些引擎
+
+首先运行 Exa 和 Keenable。degoog、Startpage、DuckDuckGo 和 AnySearch 为备用
+引擎，在某个引擎失败时接替。六个引擎都无需密钥；可选的密钥只用于提高限流额度。
+
+## 设置
+
+默认配置无需修改。引擎顺序、超时时间和可选密钥见
+[docs/architecture.md](docs/architecture.md)。
+
+## 测试
+
+```sh
+node test/offline.mjs                       # 不联网
+node test/integration.mjs                   # 所有引擎，真实联网
+node test/integration.mjs "你的查询"         # 自定义查询
 ```
 
 ---
@@ -121,6 +167,10 @@ it — forks are welcome, and PRs are read when life allows.
 
 ## Credits & thank-yous
 
+- [pi-web-access](https://github.com/nicobailon/pi-web-access) (MIT) — the Exa,
+  AnySearch, Keenable, and degoog adapters are ports of its providers, so
+  upstream fixes can be carried across by diffing those files. Mapping in
+  [NOTICE](NOTICE).
 - [oh-my-pi](https://github.com/can1357/oh-my-pi) (MIT) — substantial portions
   of this package are ported from its web-search subsystem, file mapping in
   [NOTICE](NOTICE). It helped a LOT.
@@ -139,6 +189,6 @@ it — forks are welcome, and PRs are read when life allows.
 
 ## License
 
-[MIT](LICENSE). Substantial portions are ported from oh-my-pi's MIT-licensed
-web-search subsystem; see [NOTICE](NOTICE) for the copyright lines and the
-file-by-file mapping.
+[MIT](LICENSE). Substantial portions are ported from pi-web-access and
+oh-my-pi's MIT-licensed web-search subsystems; see [NOTICE](NOTICE) for the
+copyright lines and the file-by-file mapping.

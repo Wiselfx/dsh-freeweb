@@ -93,11 +93,6 @@ and plugin config resolved when the process boots. **Adding, removing,
 reinstalling, or reconfiguring dsh-freeweb therefore requires restarting dsh**
 before anything changes.
 
-One deliberate exception: Firecrawl credentials are checked per search, not
-cached at startup. With `engines.firecrawl: auto` (the default), a key or
-self-hosted endpoint present in the environment is picked up on subsequent
-searches without touching the config again.
-
 ## Verify the install
 
 No model call, no quota spent — this only prints the composed profile tree:
@@ -175,6 +170,6 @@ uninstalling leaves the profile pointing at nothing — run the remove first.
 | New engine/deadline config has no effect | same reason — plugin config is read at boot | restart dsh |
 | `web seam has no registerSearchProvider` in the log | the seam surface moved in a newer dsh | check the compatibility list in [dsh.md](dsh.md); the plugin degrades instead of crashing |
 | `all keyless engines failed` | every enabled engine was bot-walled or unreachable from this network | retry later; enable more engines; or use a keyed provider for that egress |
-| Only `perplexity` appears in "engines answering" | DDG/Startpage challenged your IP (common on datacenter hosts) | expected sometimes; consensus still returns results plus the answer |
-| Firecrawl never participates | no credential found (`FIRECRAWL_API_KEY`, explicit key, or non-default base URL) | set one; `auto` mode picks it up per search — see [Restart requirement](#restart-requirement) |
-| Firecrawl returns 403 "IP looks suspicious" | the hosted *keyless* tier rejects datacenter/shared egress IPs | use the free API key or a self-hosted endpoint |
+| `[freeweb fallback used: …]` appears in content | a preferred engine failed and the next in `engineOrder` took its slot | expected sometimes on datacenter hosts; the call still returns results |
+| `all keyless engines failed` | every enabled engine was bot-walled or unreachable | retry later, or use another network |
+| Exa never answers | its free MCP rate limit was hit | retry later, or set `EXA_API_KEY` |

@@ -1,7 +1,7 @@
 {
   "name": "dsh-freeweb",
   "version": "0.1.0",
-  "description": "Keyless web-search provider for DeepSeek Harness (dsh): DuckDuckGo + Startpage scrapers and Perplexity's anonymous ask endpoint behind a consensus fan-out. No API keys, no signup, no quota owner.",
+  "description": "Keyless web-search provider for DeepSeek Harness (dsh): Startpage, DuckDuckGo, Exa, AnySearch, Keenable and degoog behind a consensus fan-out. No API keys, no signup, no quota owner.",
   "type": "module",
   "main": "./dsh/index.js",
   "exports": {
@@ -21,10 +21,13 @@
     "deepseek-harness",
     "web-search",
     "search",
-    "duckduckgo",
+    "keyless",
     "startpage",
-    "perplexity",
-    "keyless"
+    "duckduckgo",
+    "exa",
+    "anysearch",
+    "keenable",
+    "degoog"
   ],
   "engines": {
     "node": ">=20.3"

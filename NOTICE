@@ -1,6 +1,17 @@
 NOTICE — third-party code
 
-Portions of this package are ported from the oh-my-pi project
+Portions of this package are ported from the pi-web-access project
+(https://github.com/nicobailon/pi-web-access), licensed under the MIT License:
+
+  Copyright (c) 2025 Nico Bailon
+
+Ported files (adapted to plain JavaScript; keyless code paths preserved):
+  - lib/engines/exa.js         ← exa.ts        (callExaMcp / parseMcpResults)
+  - lib/engines/anysearch.js   ← anysearch.ts  (request/response shape)
+  - lib/engines/keenable.js    ← keenable.ts   (public endpoint + X-Keenable-Title)
+  - lib/engines/degoog.js      ← degoog.ts     (public instance /api/search)
+
+Portions are also ported from the oh-my-pi project
 (https://github.com/can1357/oh-my-pi), packages/coding-agent/src/web/search/,
 licensed under the MIT License:
 
@@ -10,10 +21,6 @@ licensed under the MIT License:
 
 Ported files (adapted to plain JavaScript; behavioral logic preserved):
   - lib/query.js                ← src/web/search/query.ts
-  - lib/engines/duckduckgo.js   ← src/web/search/providers/duckduckgo.ts
   - lib/engines/startpage.js    ← src/web/search/providers/startpage.ts
+  - lib/engines/duckduckgo.js   ← src/web/search/providers/duckduckgo.ts
   - lib/merge.js (merge/rank)   ← src/web/search/providers/public.ts
-
-The Perplexity anonymous-ask engine (lib/engines/perplexity.js) and the
-Firecrawl v2 engine (lib/engines/firecrawl.js) are independent
-implementations informed by the same MIT-licensed source.

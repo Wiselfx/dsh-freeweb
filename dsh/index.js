@@ -5,80 +5,71 @@
 // built-in web_search tool, citation cards, and UI keep working unchanged —
 // only the backend behind them changes.
 //
-// The provider fans the query out to three independent keyless engines
-// concurrently and merges results by cross-engine consensus (oh-my-pi's
-// public-aggregate strategy, MIT; see NOTICE):
+// Two engines are active at a time, in priority order. Each is asked for
+// RESULTS_PER_ENGINE results. If one fails, the next engine in the order takes
+// its slot, so two live engines are kept active for as long as candidates
+// remain. Whatever answers is merged by cross-engine agreement and everything
+// unique is returned (dsh applies its own display cap).
 //
-//   - duckduckgo   HTML frontend scraper        (fast, ranked snippets)
-//   - startpage    Google index via proxy       (needs homepage token dance)
-//   - perplexity   anonymous ask endpoint       (slower, synthesized answer)
-//
-// Deadline model (from public.ts): return at the earliest of
-//   a) every engine settled,
-//   b) soft deadline elapsed with ≥1 success in hand,
-//   c) hard deadline elapsed regardless.
-// One slow engine can never pin the tool call past the hard cap, and one
-// blocked engine never fails the call while others answer.
+// All engines are keyless. Optional keys only raise rate limits.
 
 import { mergeEngineResults } from '../lib/merge.js';
+import { compactSources } from '../lib/compact.js';
 import {
   parseSearchQuery,
   formatScraperQuery,
-  formatQuery,
-  GOOGLE_QUERY_SYNTAX,
   applyQueryConstraints,
 } from '../lib/query.js';
-import { searchDuckDuckGo } from '../lib/engines/duckduckgo.js';
 import { searchStartpage } from '../lib/engines/startpage.js';
-import { searchPerplexity } from '../lib/engines/perplexity.js';
-import { searchFirecrawl, hasFirecrawlCredential } from '../lib/engines/firecrawl.js';
+import { searchDuckDuckGo } from '../lib/engines/duckduckgo.js';
+import { searchExa } from '../lib/engines/exa.js';
+import { searchAnySearch } from '../lib/engines/anysearch.js';
+import { searchKeenable } from '../lib/engines/keenable.js';
+import { searchDegoog } from '../lib/engines/degoog.js';
 
 export const name = 'freeweb';
 
 /** The web capability seam is the only harness service we touch. */
 export const inject = ['web'];
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Results requested from each active engine. */
+const RESULTS_PER_ENGINE = 5;
+
+/** Active slots: two engines run concurrently. */
+const ACTIVE_ENGINES = 2;
+
+/** Priority order. The first two live engines fill the two active slots. */
+const DEFAULT_ENGINE_ORDER = ['exa', 'keenable', 'degoog', 'startpage', 'duckduckgo', 'anysearch'];
 
 function resolveConfig(config = {}) {
-  const engines = { duckduckgo: true, startpage: true, perplexity: true, firecrawl: 'auto', ...config.engines };
   return {
-    engines,
-    softDeadlineMs: config.softDeadlineMs ?? 6_000,
-    hardDeadlineMs: config.hardDeadlineMs ?? 27_000,
+    engineOrder: config.engineOrder ?? DEFAULT_ENGINE_ORDER,
     engineTimeoutMs: config.engineTimeoutMs ?? 25_000,
-    firecrawlApiKey: config.firecrawlApiKey,
+    hardDeadlineMs: config.hardDeadlineMs ?? 27_000,
+    apiKeys: {
+      exa: config.exaApiKey ?? process.env.EXA_API_KEY,
+      anysearch: config.anysearchApiKey ?? process.env.ANYSEARCH_API_KEY,
+      keenable: config.keenableApiKey ?? process.env.KEENABLE_API_KEY,
+      degoog: config.degoogApiKey ?? process.env.DEGOOG_API_KEY,
+    },
+    degoogBaseUrl: config.degoogBaseUrl,
   };
 }
 
 /**
- * Whether the firecrawl engine participates in this call.
- * - `true`         → always (hosted keyless attempt if no key)
- * - `'auto'`       → only when a key or self-hosted endpoint is configured
- *                    (the hosted keyless tier rejects many datacenter IPs)
- * - falsy          → never
- */
-function firecrawlParticipates(setting, apiKey) {
-  if (setting === true) return true;
-  if (setting === false || setting == null) return false;
-  return setting === 'auto' ? hasFirecrawlCredential(apiKey) : Boolean(setting);
-}
-
-/**
- * Fan-out search across the enabled keyless engines.
+ * Search with two active engines plus ordered fallback.
  * Exported for standalone testing; `apply()` wires this into ctx.web.
  *
- * @param {{query: string, maxResults?: number}} request
- * @param {Partial<ReturnType<typeof resolveConfig>>} [config]
+ * @param {{query: string, maxResults?: number, recency?: string}} request
+ * @param {object} [config]
  * @param {AbortSignal} [signal]
+ * @returns {Promise<{content: string, sources: Array, truncated: boolean}>}
  */
 export async function searchFreeWeb(request, config, signal) {
   const cfg = resolveConfig(config);
-  const maxResults = Math.max(1, Math.min(30, request.maxResults ?? 15));
 
-  // Google-style operators: scrapers natively understand most of them, but
-  // path-carrying site: values and inurl: zero-match on HTML frontends, so we
-  // rebuild through the lenient scraper formatter (ported from oh-my-pi).
+  // HTML frontends need the lenient operator rebuild; natural-language APIs
+  // get the raw query instead (see the runner table below).
   let parsed;
   try {
     parsed = parseSearchQuery(request.query);
@@ -94,81 +85,58 @@ export async function searchFreeWeb(request, config, signal) {
     }
   }
 
-  const tasks = [];
-  if (cfg.engines.duckduckgo) {
-    tasks.push(['duckduckgo', () => searchDuckDuckGo({ query: scraperQuery, limit: maxResults, recency: request.recency, timeoutMs: cfg.engineTimeoutMs, signal })]);
-  }
-  if (cfg.engines.startpage) {
-    tasks.push(['startpage', () => searchStartpage({ query: scraperQuery, limit: maxResults, recency: request.recency, timeoutMs: cfg.engineTimeoutMs, signal })]);
-  }
-  if (cfg.engines.perplexity) {
-    tasks.push(['perplexity', () => searchPerplexity({ query: request.query, limit: maxResults, recency: request.recency, timeoutMs: cfg.engineTimeoutMs, signal })]);
-  }
-  if (firecrawlParticipates(cfg.engines.firecrawl, cfg.firecrawlApiKey)) {
-    // Firecrawl is SERP-backed and honors Google operators natively, so it
-    // gets the full operator set; absolute date bounds move to its native
-    // tbs parameter (same split oh-my-pi makes).
-    let fcQuery = scraperQuery;
-    let fcDates;
-    if (parsed?.hasDirectives && (parsed.after || parsed.before)) {
-      fcDates = { after: parsed.after, before: parsed.before };
-      try {
-        fcQuery = formatQuery(parsed, { ...GOOGLE_QUERY_SYNTAX, dateRange: false });
-      } catch {
-        /* fall back to the shared scraper formatting */
-      }
-    }
-    tasks.push(['firecrawl', () => searchFirecrawl({ query: fcQuery, dates: fcDates, limit: maxResults, recency: request.recency, timeoutMs: cfg.engineTimeoutMs, signal, apiKey: cfg.firecrawlApiKey })]);
-  }
-  if (tasks.length === 0) throw new Error('freeweb: every engine is disabled by configuration');
+  // One hard cap for the whole call. Engines still running when it fires are
+  // aborted, so the tool call can never outlive hardDeadlineMs.
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), cfg.hardDeadlineMs);
+  const linked = signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal;
+  const common = { timeoutMs: cfg.engineTimeoutMs, signal: linked, recency: request.recency };
 
-  // Straggler controller: once this orchestrator decides to return, engines
-  // still running are cancelled so nothing outlives the call.
-  const straggler = new AbortController();
-  const linked = signal ? AbortSignal.any([signal, straggler.signal]) : straggler.signal;
+  const runners = {
+    startpage: () => searchStartpage({ ...common, query: scraperQuery, limit: RESULTS_PER_ENGINE }),
+    duckduckgo: () => searchDuckDuckGo({ ...common, query: scraperQuery, limit: RESULTS_PER_ENGINE }),
+    exa: () => searchExa({ ...common, query: request.query, limit: RESULTS_PER_ENGINE, apiKey: cfg.apiKeys.exa }),
+    anysearch: () => searchAnySearch({ ...common, query: request.query, limit: RESULTS_PER_ENGINE, apiKey: cfg.apiKeys.anysearch }),
+    keenable: () => searchKeenable({ ...common, query: request.query, limit: RESULTS_PER_ENGINE, apiKey: cfg.apiKeys.keenable }),
+    degoog: () => searchDegoog({ ...common, query: request.query, limit: RESULTS_PER_ENGINE, apiKey: cfg.apiKeys.degoog, baseUrl: cfg.degoogBaseUrl }),
+  };
+
+  const queue = cfg.engineOrder.filter((id) => typeof runners[id] === 'function');
+  if (queue.length === 0) throw new Error('freeweb: no engines configured');
 
   const successes = [];
   const failures = [];
-  let settledCount = 0;
-  let firstSuccess;
-  const firstSuccessPromise = new Promise((resolve) => {
-    firstSuccess = resolve;
-  });
-
-  const all = Promise.all(
-    tasks.map(async ([label, run]) => {
-      try {
-        const result = await run();
-        successes.push(result);
-        firstSuccess();
-      } catch (err) {
-        failures.push(`${label}: ${err?.message ?? err}`);
-      } finally {
-        settledCount += 1;
-      }
-    }),
-  );
-
-  await Promise.race([all, sleep(cfg.softDeadlineMs)]);
-  if (successes.length === 0 && settledCount < tasks.length) {
-    // Soft deadline fired before any engine answered — wait (up to the hard
-    // cap) for the FIRST success so a slow field degrades to fewer engines
-    // rather than an empty answer.
-    await Promise.race([all, firstSuccessPromise, sleep(Math.max(0, cfg.hardDeadlineMs - cfg.softDeadlineMs))]);
+  try {
+    // Fill the active slots. A failed engine is replaced by the next candidate
+    // until two engines have answered or the order is exhausted.
+    while (successes.length < ACTIVE_ENGINES && queue.length > 0) {
+      if (linked.aborted) break;
+      const need = ACTIVE_ENGINES - successes.length;
+      const batch = queue.splice(0, need);
+      const settled = await Promise.allSettled(batch.map((id) => runners[id]()));
+      settled.forEach((outcome, i) => {
+        if (outcome.status === 'fulfilled') successes.push(outcome.value);
+        else failures.push(`${batch[i]}: ${outcome.reason?.message ?? outcome.reason}`);
+      });
+    }
+  } finally {
+    clearTimeout(timer);
   }
-  if (settledCount < tasks.length) straggler.abort();
-  await Promise.race([all, sleep(2_000)]); // give cancelled engines a moment to settle
 
   if (successes.length === 0) {
+    if (signal?.aborted) {
+      const err = new Error('freeweb: search was aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
     throw new Error(`freeweb: all keyless engines failed — ${failures.join('; ')}`);
   }
 
-  // Consensus merge across whatever answered.
-  let sources = mergeEngineResults(successes, maxResults);
+  // Merge by consensus. No cap here: every unique result survives.
+  let sources = mergeEngineResults(successes, Number.POSITIVE_INFINITY);
 
   // Lenient post-filter for constraints the HTML frontends cannot enforce
-  // natively (before:/after:/site: with paths). A dimension that would wipe
-  // out all results is relaxed instead of returning an empty page.
+  // natively. A dimension that would wipe out all results is relaxed.
   const notes = [];
   if (parsed?.hasConstraints && sources.length > 0) {
     try {
@@ -184,12 +152,13 @@ export async function searchFreeWeb(request, config, signal) {
     }
   }
 
-  // Perplexity contributes a synthesized answer when it participated; the
-  // contributing-engine summary rides along as context, not noise.
-  const pplx = successes.find((s) => s.engine === 'perplexity');
+  // Rendering-only final step: rank-budgeted snippets keep the token cost down
+  // after dsh applies its own display cap. Selection and ordering are untouched.
+  sources = compactSources(sources);
+
   const contentParts = notes.map((n) => `Note: ${n}`);
-  if (pplx?.answer) contentParts.push(pplx.answer.trim());
   contentParts.push(`[freeweb engines answering: ${successes.map((s) => s.engine).join(', ')}]`);
+  if (failures.length > 0) contentParts.push(`[freeweb fallback used: ${failures.join('; ')}]`);
 
   return {
     content: contentParts.filter(Boolean).join('\n\n'),

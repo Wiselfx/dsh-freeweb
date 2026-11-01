@@ -10,8 +10,8 @@ read_when:
 
 dsh-freeweb is a native dsh bundle. It keeps dsh's built-in `web_search` tool
 and citation cards, and replaces only the search provider behind them with a
-three-engine keyless consensus fan-out (DuckDuckGo scraper + Startpage proxy +
-Perplexity anonymous ask).
+two-active-engine keyless fan-out with ordered fallback (Exa + Keenable by
+default; degoog, Startpage, DuckDuckGo, AnySearch as fallbacks).
 
 ## Compatibility
 
@@ -55,5 +55,6 @@ node test/integration.mjs "your query here"
 | Symptom | Meaning | Fix |
 | --- | --- | --- |
 | `all keyless engines failed` | every engine bot-walled or offline this egress | retry later; or disable none / add a keyed provider for that network |
-| Only `perplexity` answering | DDG/Startpage challenged from your IP | expected on some datacenter IPs; consensus still returns results+answer |
+| `[freeweb fallback used: …]` in content | the preferred engine failed and the next slot took over | expected occasionally; the call still returns results |
+| `all keyless engines failed` | every enabled engine was bot-walled or unreachable | retry later, or use another network |
 | `web seam has no registerSearchProvider` in log | surface moved in a newer dsh | check compatibility above |

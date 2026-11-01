@@ -15,33 +15,30 @@ const parsed = q.parseSearchQuery('site:example.com "exact phrase" -noise');
 assert.equal(parsed.hasConstraints, true);
 assert.ok(Array.isArray(parsed.sites) && parsed.sites.includes('example.com'));
 
-// 2. the merge module ranks consensus first
+// 2. every engine module loads and exports one search function
+for (const [file, exportName] of [
+  ['startpage', 'searchStartpage'],
+  ['duckduckgo', 'searchDuckDuckGo'],
+  ['exa', 'searchExa'],
+  ['anysearch', 'searchAnySearch'],
+  ['keenable', 'searchKeenable'],
+  ['degoog', 'searchDegoog'],
+]) {
+  const mod = await import(`../lib/engines/${file}.js`);
+  assert.equal(typeof mod[exportName], 'function', `${file}.js must export ${exportName}()`);
+}
+
+// 3. the consensus merge ranks agreement first
 const { mergeEngineResults } = await import('../lib/merge.js');
 const merged = mergeEngineResults(
   [
-    {
-      engine: 'a',
-      sources: [
-        { title: 'both', url: 'https://x.com/page' },
-        { title: 'only-a', url: 'https://x.com/solo' },
-      ],
-    },
+    { engine: 'a', sources: [{ title: 'both', url: 'https://x.com/page' }, { title: 'only-a', url: 'https://x.com/solo' }] },
     { engine: 'b', sources: [{ title: 'both-b', url: 'https://www.x.com/page/' }] },
   ],
   10,
 );
-// www./trailing-slash variants dedup to one entry; tie on rank keeps first-seen
 assert.equal(merged.length, 2);
 assert.equal(merged[0].url, 'https://x.com/page', 'cross-engine agreement wins');
-assert.ok(merged.some((s) => s.url.endsWith('/solo')));
-
-// 3. firecrawl credential detection reacts to env
-const fc = await import('../lib/engines/firecrawl.js');
-delete process.env.FIRECRAWL_API_KEY;
-assert.equal(fc.hasFirecrawlCredential(), false);
-process.env.FIRECRAWL_API_KEY = 'fc-x';
-assert.equal(fc.hasFirecrawlCredential(), true);
-delete process.env.FIRECRAWL_API_KEY;
 
 // 4. the plugin entry loads and registers into a mock seam
 const plugin = await import('../dsh/index.js');
@@ -50,5 +47,31 @@ let registered;
 plugin.apply({ web: { registerSearchProvider(p) { registered = p; } } }, {});
 assert.equal(registered?.id, 'freeweb');
 assert.equal(registered?.available(), true);
+
+// 5. an empty engine order is rejected locally, without network
+await assert.rejects(
+  () => plugin.searchFreeWeb({ query: 'x' }, { engineOrder: [] }),
+  /no engines configured/i,
+);
+
+// 6. rank-budgeted compaction is rendering-only and shrinks snippets
+const { compactSources, clipSnippet } = await import('../lib/compact.js');
+const long = 'A'.repeat(50) + '. ' + 'B'.repeat(300);
+assert.ok(clipSnippet(long, 80).length <= 82, 'clipSnippet respects the budget');
+const sample = [
+  { title: 't1', url: 'https://a/1', snippet: 'x'.repeat(900) },
+  { title: 't2', url: 'https://a/2', snippet: 'y'.repeat(900) },
+  { title: 't3', url: 'https://a/3', snippet: 'z'.repeat(900) },
+  { title: 't4', url: 'https://a/4', snippet: 'w'.repeat(900) },
+  { title: 't5', url: 'https://a/5', snippet: 'v'.repeat(900) },
+];
+const compacted = compactSources(sample);
+assert.equal(compacted.length, sample.length, 'selection is untouched');
+assert.deepEqual(compacted.map((s) => s.url), sample.map((s) => s.url), 'ordering is untouched');
+assert.ok(compacted[0].snippet.length <= 500 && compacted[1].snippet.length <= 220,
+  'per-rank budgets apply');
+assert.ok(compacted[4].snippet.length <= 80, 'tail budget applies');
+
+console.log('compaction checks passed');
 
 console.log('offline checks passed');
