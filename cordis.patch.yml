@@ -6,6 +6,12 @@
 - id: web
   config:
     searchProvider: freeweb
+    # Re-declare the base's fetch provider: applyEntryPatches replaces the
+    # whole `web` config on patch, so omitting this drops `fetchProvider`,
+    # leaving the web seam with no configured provider and both `http` and
+    # `deepseek-fetch-api` usable (WEB_PROVIDER_AMBIGUOUS). Pinning it keeps
+    # fetch working and makes this layer self-contained.
+    fetchProvider: http
 
 - insert:
     - id: freeweb
